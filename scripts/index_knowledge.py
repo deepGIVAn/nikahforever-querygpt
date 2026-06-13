@@ -176,7 +176,7 @@ def build_glossary_documents() -> list[Document]:
     """Domain terms that the LLM might misinterpret."""
     glossary = [
         {"term": "match", "definition": "A mutual connection between two users who have both expressed interest in each other. Stored in the matches table with match_id, user_a_id, user_b_id, matched_at."},
-        {"term": "premium / gold / platinum", "definition": "Paid subscription tiers in the plans table. Users subscribe via the subscriptions table and pay via the payments table."},
+        {"term": "silver / gold / platinum / premium / subscription plans", "definition": "The only paid subscription plans available on the platform are 'Silver', 'Gold', and 'Platinum' (stored in the plans table). There is NO 'Basic' or 'Standard' plan. Users subscribe via the subscriptions table and pay via the payments table."},
         {"term": "profile view", "definition": "When one user views another user's profile. Tracked in profile_views with viewer_id and viewed_id."},
         {"term": "report", "definition": "A user filing a complaint against another user. Stored in reports with reporter_id and reported_id, and status (open/actioned/dismissed)."},
         {"term": "interest", "definition": "Expressing desire to connect. Stored in interests with sender_id and receiver_id, and status (pending/accepted/declined)."},
