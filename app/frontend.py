@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import json
 import pandas as pd
+import altair as alt
 import os
 
 # Page config
@@ -331,6 +332,56 @@ st.markdown("""
         background-color: #FFFFFF !important;
         color: #2D2D2D !important;
     }
+
+    /* Fix table overflow inside chat bubbles and make them scrollable horizontally */
+    .chat-bubble-agent table,
+    .chat-bubble-user table {
+        display: block !important;
+        width: 100% !important;
+        overflow-x: auto !important;
+        border-collapse: collapse !important;
+        margin-top: 12px !important;
+        margin-bottom: 12px !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    }
+    
+    .chat-bubble-agent table th,
+    .chat-bubble-user table th {
+        background-color: #EFEFEF !important;
+        color: #1D1C1D !important;
+        font-weight: 600 !important;
+        padding: 8px 12px !important;
+        border: 1px solid #E5E5E5 !important;
+        white-space: nowrap !important;
+    }
+    
+    .chat-bubble-agent table td,
+    .chat-bubble-user table td {
+        background-color: #FFFFFF !important;
+        color: #2D2D2D !important;
+        padding: 8px 12px !important;
+        border: 1px solid #E5E5E5 !important;
+        white-space: nowrap !important;
+    }
+    
+    /* Style history selection buttons in chat container to look like small pills */
+    div[data-testid="column"]:first-child .stButton>button {
+        width: auto !important;
+        margin-left: 10px !important;
+        border-radius: 12px !important;
+        padding: 4px 12px !important;
+        font-size: 0.78rem !important;
+        margin-bottom: 12px !important;
+        background-color: #FFF4F6 !important;
+        border: 1px solid #FFD1DC !important;
+        color: #A61D5D !important;
+        display: inline-block !important;
+    }
+    div[data-testid="column"]:first-child .stButton>button:hover {
+        background: linear-gradient(135deg, #FF66A3 0%, #B829D6 100%) !important;
+        color: white !important;
+        border-color: transparent !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -434,11 +485,18 @@ with col_chat:
     chat_placeholder = st.container(height=520)
     
     with chat_placeholder:
-        for msg in st.session_state.messages:
+        for idx, msg in enumerate(st.session_state.messages):
             if msg["role"] == "user":
                 st.markdown(f'<div class="chat-bubble-user">{msg["content"]}</div>', unsafe_allow_html=True)
             else:
                 st.markdown(f'<div class="chat-bubble-agent">{msg["content"]}</div>', unsafe_allow_html=True)
+                if msg.get("sql") or msg.get("result"):
+                    st.markdown('<div class="chat-clear"></div>', unsafe_allow_html=True)
+                    if st.button("📊 View Details & Chart", key=f"hist_select_{idx}"):
+                        st.session_state.active_sql = msg.get("sql")
+                        st.session_state.active_result = msg.get("result")
+                        st.session_state.active_explanation = msg.get("explanation")
+                        st.rerun()
             st.markdown('<div class="chat-clear"></div>', unsafe_allow_html=True)
 
     # Process prompt submission (from input or sidebar click)
@@ -568,7 +626,13 @@ with col_chat:
                         display_text = explanation
                         
                     agent_bubble.markdown(f'<div class="chat-bubble-agent">{display_text}</div><div class="chat-clear"></div>', unsafe_allow_html=True)
-                    st.session_state.messages.append({"role": "assistant", "content": display_text})
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": display_text,
+                        "sql": sql_found,
+                        "result": result_found,
+                        "explanation": explanation_found
+                    })
                     
                     # Store active results
                     st.session_state.active_sql = sql_found
@@ -610,7 +674,7 @@ with col_details:
                 """, unsafe_allow_html=True)
                 
             # Display Tabs
-            tab_vis, tab_sql, tab_data = st.tabs(["🖼️ Visualization", "🔍 Generated SQL", "📋 Raw Data Table"])
+            tab_vis, tab_sql = st.tabs(["🖼️ Visualization", "🔍 Generated SQL"])
             
             # Tab 1: Visualization tab
             with tab_vis:
@@ -627,22 +691,111 @@ with col_details:
                     
                 elif res_type == "chart" and not df.empty:
                     chart_conf = result.get("chart_config") or {}
-                    c_type = chart_conf.get("type", "bar")
+                    c_type = chart_conf.get("type", "bar").lower()
                     x_col = chart_conf.get("x")
                     y_col = chart_conf.get("y")
                     
-                    st.write(f"Plotting **{c_type}** chart: `{x_col}` vs `{y_col}`")
+                    # Verify column existence in df and fallback if needed
+                    cols = list(df.columns)
+                    if not x_col or x_col not in cols:
+                        x_col = cols[0] if len(cols) > 0 else None
+                    if not y_col or y_col not in cols:
+                        y_col = cols[1] if len(cols) > 1 else cols[0] if len(cols) > 0 else None
                     
-                    # Render correct chart
-                    if c_type == "bar":
-                        st.bar_chart(df.set_index(x_col)[y_col] if x_col in df.columns else df)
-                    elif c_type == "line":
-                        st.line_chart(df.set_index(x_col)[y_col] if x_col in df.columns else df)
-                    elif c_type == "pie":
-                        # Pie chart fallback using altair or direct st.dataframe
-                        st.dataframe(df, use_container_width=True)
+                    if x_col and y_col:
+                        try:
+                            # Brand colors for premium theme
+                            brand_color = '#D81B60'
+                            brand_accent = '#9C27B0'
+                            color_palette = ['#D81B60', '#9C27B0', '#FF4081', '#673AB7', '#FF80AB', '#E91E63', '#3F51B5']
+                            
+                            # Render charts using Altair
+                            if c_type == "bar":
+                                chart = alt.Chart(df).mark_bar(
+                                    cornerRadiusTopLeft=6,
+                                    cornerRadiusTopRight=6,
+                                    color=brand_color
+                                ).encode(
+                                    x=alt.X(f"{x_col}:N", sort='-y', axis=alt.Axis(labelAngle=-45, title=x_col, labelFontSize=11, titleFontSize=12)),
+                                    y=alt.Y(f"{y_col}:Q", axis=alt.Axis(title=y_col, labelFontSize=11, titleFontSize=12)),
+                                    tooltip=[x_col, y_col]
+                                ).properties(
+                                    height=380
+                                ).configure_view(
+                                    strokeWidth=0
+                                )
+                                st.altair_chart(chart, use_container_width=True)
+                                
+                            elif c_type == "line":
+                                # Base line chart
+                                line = alt.Chart(df).mark_line(
+                                    color=brand_color,
+                                    strokeWidth=3,
+                                    interpolate='monotone'
+                                ).encode(
+                                    x=alt.X(f"{x_col}:O", axis=alt.Axis(labelAngle=-45, title=x_col, labelFontSize=11, titleFontSize=12)),
+                                    y=alt.Y(f"{y_col}:Q", axis=alt.Axis(title=y_col, labelFontSize=11, titleFontSize=12)),
+                                    tooltip=[x_col, y_col]
+                                )
+                                # Add point overlay for interactive tooltips
+                                points = alt.Chart(df).mark_point(
+                                    color=brand_accent,
+                                    size=80,
+                                    filled=True
+                                ).encode(
+                                    x=alt.X(f"{x_col}:O"),
+                                    y=alt.Y(f"{y_col}:Q"),
+                                    tooltip=[x_col, y_col]
+                                )
+                                chart = (line + points).properties(
+                                    height=380
+                                ).configure_view(
+                                    strokeWidth=0
+                                )
+                                st.altair_chart(chart, use_container_width=True)
+                                
+                            elif c_type in ("pie", "donut"):
+                                chart = alt.Chart(df).mark_arc(
+                                    innerRadius=60,
+                                    outerRadius=120,
+                                    stroke='#FFFFFF',
+                                    strokeWidth=2
+                                ).encode(
+                                    theta=alt.Theta(field=y_col, type="quantitative"),
+                                    color=alt.Color(
+                                        field=x_col, 
+                                        type="nominal", 
+                                        scale=alt.Scale(range=color_palette),
+                                        legend=alt.Legend(title=x_col, labelFontSize=11, titleFontSize=12)
+                                    ),
+                                    tooltip=[x_col, y_col]
+                                ).properties(
+                                    height=380
+                                ).configure_view(
+                                    strokeWidth=0
+                                )
+                                st.altair_chart(chart, use_container_width=True)
+                                
+                            else:
+                                # Default to bar chart if type is unrecognized
+                                chart = alt.Chart(df).mark_bar(
+                                    cornerRadiusTopLeft=6,
+                                    cornerRadiusTopRight=6,
+                                    color=brand_color
+                                ).encode(
+                                    x=alt.X(f"{x_col}:N", sort='-y', axis=alt.Axis(labelAngle=-45, title=x_col)),
+                                    y=alt.Y(f"{y_col}:Q", axis=alt.Axis(title=y_col)),
+                                    tooltip=[x_col, y_col]
+                                ).properties(
+                                    height=380
+                                )
+                                st.altair_chart(chart, use_container_width=True)
+                                
+                        except Exception as e:
+                            st.error(f"Error plotting chart: {str(e)}")
+                            st.dataframe(df, use_container_width=True, height=350)
                     else:
-                        st.bar_chart(df.set_index(x_col)[y_col] if x_col in df.columns else df)
+                        st.dataframe(df, use_container_width=True, height=350)
                 else:
                     # Table rendering fallback
                     if not df.empty:
@@ -655,14 +808,6 @@ with col_details:
                 if st.session_state.active_sql:
                     st.markdown("**Executed Read-Only SQL:**")
                     st.code(st.session_state.active_sql, language="sql")
-                    
-            # Tab 3: Full Data Table Tab
-            with tab_data:
-                if not df.empty:
-                    st.markdown(f"**Returned Data:** ({len(df)} rows)")
-                    st.dataframe(df, use_container_width=True, height=350)
-                else:
-                    st.info("No data available.")
                     
         elif st.session_state.clarification_needed:
             st.markdown(f"""

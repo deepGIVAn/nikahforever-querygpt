@@ -142,7 +142,7 @@ def build_few_shot_documents() -> list[Document]:
 
         # --- Cross-table ---
         {"nl": "Premium users who never sent a message",
-         "sql": "SELECT u.user_id, u.full_name FROM users u JOIN subscriptions s ON u.user_id = s.user_id JOIN plans p ON s.plan_id = p.plan_id LEFT JOIN matches m ON (u.user_id = m.user_a_id OR u.user_id = m.user_b_id) LEFT JOIN messages msg ON m.match_id = msg.match_id AND msg.sender_id = u.user_id WHERE (LOWER(p.plan_name) LIKE '%premium%' OR LOWER(p.plan_name) LIKE '%gold%') AND msg.message_id IS NULL AND s.status = 'active'",
+         "sql": "SELECT DISTINCT u.user_id, u.full_name FROM users u JOIN subscriptions s ON u.user_id = s.user_id JOIN plans p ON s.plan_id = p.plan_id LEFT JOIN matches m ON (u.user_id = m.user_a_id OR u.user_id = m.user_b_id) LEFT JOIN messages msg ON m.match_id = msg.match_id AND msg.sender_id = u.user_id WHERE (LOWER(p.plan_name) LIKE '%premium%' OR LOWER(p.plan_name) LIKE '%gold%') AND msg.message_id IS NULL AND s.status = 'active'",
          "tables": "users,subscriptions,plans,matches,messages"},
 
         # --- Partner Preferences ---
